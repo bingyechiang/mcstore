@@ -1,25 +1,23 @@
 // /api/shop.js
-import { kv } from '@vercel/kv';
+// 纯内存存储（无需 Vercel KV，无需环境变量）
+let items = []; // 内存数组
 
-const STORAGE_KEY = 'player_shop_items';
-const SEED_KEY = 'shop_seeded';
+// 初始化种子数据（仅首次）
+let seeded = false;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  try {
-    // 初始化种子（仅在第一次）
-    const seeded = await kv.get(SEED_KEY);
-    if (!seeded) {
-      await seedData();
-      await kv.set(SEED_KEY, 'true');
-    }
+  // 首次调用时填充种子数据
+  if (!seeded) {
+    await seedData();
+    seeded = true;
+  }
 
+  try {
     if (req.method === 'GET') {
-      const data = await kv.get(STORAGE_KEY);
-      const items = data ? JSON.parse(data) : [];
       return res.status(200).json({ items });
     }
 
@@ -49,14 +47,8 @@ export default async function handler(req, res) {
         icon: icon || '/img/dirt.png',
         createdAt: Date.now()
       };
-
-      // 读取现有数据（字符串）
-      const raw = await kv.get(STORAGE_KEY);
-      const current = raw ? JSON.parse(raw) : [];
-      current.unshift(newItem);
-      // 存为字符串
-      await kv.set(STORAGE_KEY, JSON.stringify(current));
-      return res.status(200).json({ items: current });
+      items.unshift(newItem);
+      return res.status(200).json({ items });
     }
 
     res.status(405).json({ error: 'Method Not Allowed' });
@@ -66,10 +58,10 @@ export default async function handler(req, res) {
   }
 }
 
-// ===== 种子数据 =====
+// ===== 种子数据（从 CSV 加载或使用内置） =====
 async function seedData() {
   try {
-    // 尝试从 /csv/shopitem.csv 加载（生产环境需配置域名）
+    // 尝试从 /csv/shopitem.csv 加载
     const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
     let csvText = '';
     try {
@@ -92,7 +84,7 @@ async function seedData() {
       }
     }
 
-    // 如果无数据则用内置示例
+    // 无数据则用内置样例
     if (rows.length === 0) {
       rows = [
         { '商品名': '泥土', '单价': '1', '剩余数量': '999', '卖家': '服主' },
@@ -100,7 +92,7 @@ async function seedData() {
       ];
     }
 
-    const items = rows.map(row => ({
+    items = rows.map(row => ({
       name: row['商品名']?.trim() || '未知',
       price: parseInt(row['单价']) || 1,
       qty: parseInt(row['剩余数量']) || 1,
@@ -108,11 +100,9 @@ async function seedData() {
       icon: '/img/dirt.png',
       createdAt: Date.now() + Math.random() * 1000
     }));
-
-    await kv.set(STORAGE_KEY, JSON.stringify(items));
-    console.log(`✅ 种子数据已导入 ${items.length} 件商品`);
+    console.log(`✅ 种子数据已加载 ${items.length} 件商品（内存存储，重启后丢失）`);
   } catch (err) {
-    console.warn('⚠️ 种子数据导入失败，初始化空列表', err);
-    await kv.set(STORAGE_KEY, JSON.stringify([]));
+    console.warn('种子数据生成失败，使用空列表', err);
+    items = [];
   }
 }
