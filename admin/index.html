@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理员后台</title>
+  <!-- 无样式 -->
+</head>
+<body>
+  <h1>管理员后台</h1>
+  <div id="loginSection">
+    <h2>登录</h2>
+    <input type="password" id="adminPwd" placeholder="管理员密码">
+    <button onclick="adminLogin()">进入</button>
+    <div id="adminError" style="color:red;"></div>
+  </div>
+  <div id="adminPanel" style="display:none;">
+    <h2>所有商品</h2>
+    <div>
+      <label>筛选卖家：<input type="text" id="filterSeller" placeholder="输入卖家名" oninput="loadItems()"></label>
+      <button onclick="loadItems()">刷新</button>
+    </div>
+    <div id="itemList"></div>
+    <hr>
+    <div>
+      <h3>管理玩家密码</h3>
+      <p>输入玩家ID和要设置的新密码</p>
+      <input type="text" id="setPlayerId" placeholder="玩家ID">
+      <input type="text" id="setPlayerPwd" placeholder="新密码">
+      <button onclick="setPlayerPassword()">设置/重置密码</button>
+      <div id="pwdResult"></div>
+    </div>
+  </div>
+  <script src="/admin/script.js"></script>
+</body>
+</html>
