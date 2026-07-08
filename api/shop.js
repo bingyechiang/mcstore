@@ -1,9 +1,5 @@
 // /api/shop.js
-import { createClient } from '@vercel/redis';
-
-const redis = createClient({
-  url: process.env.REDIS_URL
-});
+import { redis } from "@vercel/redis";
 
 const STORAGE_KEY = 'player_shop_items';
 
