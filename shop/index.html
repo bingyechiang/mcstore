@@ -3,18 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>玩家集市</title>
-  <!-- 全局基础样式 -->
+  <title>玩家集市 · 泥土交易</title>
   <link rel="stylesheet" href="/style.css">
-  <!-- 交易中心专有样式 -->
   <link rel="stylesheet" href="/shop/style.css">
-  <!-- 依赖库 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/rough.js/2.3.0/rough.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 </head>
 <body>
 <div class="container shop-container">
-  <!-- ===== 顶部栏（完全复用首页） ===== -->
+
+  <!-- ===== 顶部栏 ===== -->
   <div class="top-bar">
     <div class="server-brand">
       <img src="/img/command_block.png" alt="命令方块" onerror="this.style.display='none'">
@@ -26,51 +23,51 @@
     </div>
   </div>
 
-  <!-- ===== 交易中心主体 ===== -->
+  <!-- ===== 主体 ===== -->
   <div class="shop-main">
     <!-- 左侧：商品列表 -->
     <div class="shop-list">
       <div class="shop-header">
-        <h2>玩家集市</h2>
+        <h2>玩家黑市 · 后果自负</h2>
         <span class="count" id="itemCount">摆摊：0 件</span>
       </div>
-      <!-- 排序按钮（小彩蛋） -->
       <div class="sort-controls shop-sort">
         <button class="sort-btn active" data-sort="latest">最新</button>
         <button class="sort-btn" data-sort="price-asc">价格 ↑</button>
         <button class="sort-btn" data-sort="price-desc">价格 ↓</button>
       </div>
-      <!-- 卡片网格 -->
-      <div class="card-grid" id="cardGrid">
-        <!-- 动态渲染 -->
-      </div>
+      <div class="card-grid" id="cardGrid"></div>
     </div>
 
-    <!-- 右侧：发布表单（右下偏上） -->
+    <!-- 右侧：发布表单 + 管理入口 -->
     <div class="form-area" id="roughForm">
       <h3>扔点货进来</h3>
       <form id="publishForm">
         <div class="form-group">
           <label for="itemName">商品名</label>
-          <input type="text" id="itemName" placeholder="比如「“经验修补+效率五”钻石铲」" required>
+          <input type="text" id="itemName" placeholder="比如 老六专用镐" required>
         </div>
         <div class="form-group">
           <label for="itemPrice">单价（泥土）</label>
           <input type="number" id="itemPrice" placeholder="数字" min="1" required>
         </div>
         <div class="form-group">
-          <label for="itemQty">剩余数量</label>
+          <label for="itemQty">剩余数量（个）</label>
           <input type="number" id="itemQty" placeholder="多少个" min="1" required>
         </div>
         <div class="form-group">
           <label for="itemSeller">你的游戏ID</label>
           <input type="text" id="itemSeller" placeholder="游戏名" required>
         </div>
+        <div class="form-group">
+          <label for="itemPassword">管理密码（至少4位）</label>
+          <input type="password" id="itemPassword" placeholder="用于修改/下架商品" required>
+        </div>
         <div class="form-group icon-selector">
           <label for="iconSearch">选个图标（搜名称）</label>
           <input type="text" id="iconSearch" placeholder="比如 Bamboo Door" autocomplete="off">
           <div class="icon-dropdown" id="iconDropdown"></div>
-          <div class="icon-preview" id="iconPreview">
+          <div class="icon-preview">
             <img src="/img/dirt.png" alt="默认图标" id="selectedIconImg">
             <span id="selectedIconName">泥土（默认）</span>
           </div>
@@ -78,14 +75,31 @@
         </div>
         <button type="submit" id="submitBtn">扔进集市</button>
       </form>
+
+      <!-- ===== 管理入口（折叠面板） ===== -->
+      <div class="manage-toggle" id="manageToggle">
+        <span>管理我的商品</span>
+        <span class="arrow">▶</span>
+      </div>
+      <div class="manage-panel" id="managePanel">
+        <div class="form-group">
+          <label for="manageSeller">游戏ID</label>
+          <input type="text" id="manageSeller" placeholder="你的游戏名">
+        </div>
+        <div class="form-group">
+          <label for="managePassword">管理密码</label>
+          <input type="password" id="managePassword" placeholder="输入密码查看我的商品">
+        </div>
+        <button id="manageBtn">翻我的摊</button>
+        <div id="manageResults"></div>
+      </div>
     </div>
   </div>
 
-  <!-- ===== 底部标语 ===== -->
+  <!-- ===== 底部 ===== -->
   <div class="footer-note">再也不用盯着箱子挨个对名字了</div>
 </div>
 
-<!-- 交易中心专有脚本 -->
 <script src="/shop/script.js"></script>
 </body>
 </html>
