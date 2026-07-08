@@ -1,15 +1,16 @@
 // ========== 全局变量 ==========
 let allProducts = [];           // 所有商品（官方 + 玩家集市）
 let recommendProducts = [];     // 推荐商品（来自 recommend.csv）
+let playerItems = [];           // 玩家集市商品（单独存，用于显示剩余数量）
 let currentSort = 'price-asc';
 let fuseInstance = null;        // Fuse 实例
 
-// ========== 加载所有数据 ==========
-async function loadAllData() {
+// ========== 加载所有 CSV ==========
+function loadAllCSV() {
   const inputEl = document.getElementById('searchInput');
   inputEl.placeholder = '扫描商店箱子中...';
 
-  // 1. 加载官方 CSV
+  // 官方文件列表
   const officialFiles = [
     '/csv/store.csv',
     '/csv/market.csv',
@@ -17,6 +18,7 @@ async function loadAllData() {
     '/csv/score.csv',
     '/csv/superdirt.csv'
   ];
+
   const officialPromises = officialFiles.map(file =>
     new Promise((resolve) => {
       Papa.parse(file, {
@@ -29,7 +31,15 @@ async function loadAllData() {
     })
   );
 
-  // 2. 加载推荐商品 CSV
+  // 玩家集市（/api/shop）
+  const playerPromise = new Promise((resolve) => {
+    fetch('/api/shop')
+      .then(res => res.json())
+      .then(data => resolve(data.items || []))
+      .catch(() => resolve([]));
+  });
+
+  // 推荐商品
   const recommendPromise = new Promise((resolve) => {
     Papa.parse('/csv/recommend.csv', {
       download: true,
@@ -40,87 +50,91 @@ async function loadAllData() {
     });
   });
 
-  // 3. 从 API 加载玩家集市数据（动态）
-  let playerItems = [];
-  try {
-    const res = await fetch('/api/shop');
-    if (res.ok) {
-      const data = await res.json();
-      playerItems = data.items || [];
+  Promise.all([...officialPromises, playerPromise, recommendPromise]).then((results) => {
+    const merged = [];
+    playerItems = [];
+
+    // 处理官方
+    for (let i = 0; i < officialFiles.length; i++) {
+      const rows = results[i] || [];
+      const shopNameMap = ['商店', '商场', '附魔书商店', '积分商店', '超级泥土币商店'];
+      rows.forEach(row => {
+        const name = row['商品名']?.trim();
+        if (!name) return;
+        merged.push({
+          name: name,
+          price: parseInt(row['单价']) || 0,
+          qty: parseInt(row['数量']) || 0,
+          x: parseFloat(row['坐标X']) || 0,
+          y: parseFloat(row['坐标Y']) || 0,
+          z: parseFloat(row['坐标Z']) || 0,
+          shop: shopNameMap[i] || '官方商店',
+          seller: null,
+          sourceType: 'official',
+          displayQty: null // 官方不显示数量
+        });
+      });
     }
-  } catch (e) {
-    console.warn('加载玩家集市失败', e);
-  }
 
-  // 4. 加载推荐
-  const recommendRows = await recommendPromise;
-  recommendRows.forEach(row => {
-    const name = row['商品名']?.trim();
-    if (!name) return;
-    recommendProducts.push({
-      name: name,
-      price: parseInt(row['单价']) || 0,
-      qty: parseInt(row['剩余数量']) || 0,
-      x: null,
-      y: null,
-      z: null,
-      shop: null,
-      seller: row['卖家']?.trim() || '玩家集市',
-      sourceType: 'player'
+    // 处理玩家集市（results 的倒数第二个）
+    const playerRows = results[results.length - 2] || [];
+    playerRows.forEach(row => {
+      const name = row.name?.trim();
+      if (!name) return;
+      const item = {
+        name: name,
+        price: parseInt(row.price) || 0,
+        qty: parseInt(row.qty) || 0,
+        x: null,
+        y: null,
+        z: null,
+        shop: null,
+        seller: row.seller?.trim() || '玩家集市',
+        sourceType: 'player',
+        displayQty: parseInt(row.qty) || 0 // 显示剩余数量
+      };
+      merged.push(item);
+      playerItems.push(item);
     });
-  });
 
-  // 5. 合并官方数据
-  const merged = [];
-  const officialResults = await Promise.all(officialPromises);
-  const shopNameMap = ['商店', '商场', '附魔书商店', '积分商店', '超级泥土币商店'];
-  officialResults.forEach((rows, idx) => {
-    rows.forEach(row => {
+    // 处理推荐商品（results 的最后一个）
+    const recommendRows = results[results.length - 1] || [];
+    recommendRows.forEach(row => {
       const name = row['商品名']?.trim();
       if (!name) return;
-      merged.push({
+      recommendProducts.push({
         name: name,
         price: parseInt(row['单价']) || 0,
-        qty: parseInt(row['数量']) || 0,
-        x: parseFloat(row['坐标X']) || 0,
-        y: parseFloat(row['坐标Y']) || 0,
-        z: parseFloat(row['坐标Z']) || 0,
-        shop: shopNameMap[idx] || '官方商店',
-        seller: null,
-        sourceType: 'official'
+        qty: parseInt(row['剩余数量']) || 0,
+        x: null,
+        y: null,
+        z: null,
+        shop: null,
+        seller: row['卖家']?.trim() || '玩家集市',
+        sourceType: 'player',
+        displayQty: parseInt(row['剩余数量']) || 0
       });
     });
-  });
 
-  // 6. 添加玩家集市数据（来自API）
-  playerItems.forEach(item => {
-    merged.push({
-      name: item.name,
-      price: item.price,
-      qty: item.qty,
-      x: null,
-      y: null,
-      z: null,
-      shop: null,
-      seller: item.seller || '玩家集市',
-      sourceType: 'player',
-      id: item.id   // 保留id供后续操作
+    if (merged.length > 0) {
+      allProducts = merged;
+    } else {
+      console.warn('CSV 加载失败');
+    }
+
+    // ===== 初始化 Fuse.js =====
+    fuseInstance = new Fuse(allProducts, {
+      keys: ['name'],
+      threshold: 0.4,
+      minMatchCharLength: 1,
+      includeScore: true,
+      shouldSort: true,
     });
+
+    inputEl.placeholder = '搜商品名，坐标直接糊脸';
+    renderResults(document.getElementById('searchInput').value);
+    applyRough();
   });
-
-  allProducts = merged;
-
-  // 7. 初始化 Fuse（只搜索商品名）
-  fuseInstance = new Fuse(allProducts, {
-    keys: ['name'],
-    threshold: 0.3,
-    minMatchCharLength: 1,
-    includeScore: false
-  });
-
-  inputEl.placeholder = '搜商品名，坐标直接糊脸';
-  renderResults(document.getElementById('searchInput').value);
-  applyRough();
 }
 
 // ========== 渲染结果 ==========
@@ -130,8 +144,8 @@ function renderResults(filterText) {
 
   let matched = [];
 
+  // 空搜索 → 显示推荐商品
   if (text === '') {
-    // 空搜索 → 显示推荐商品
     matched = recommendProducts.length > 0 ? recommendProducts : [];
     if (matched.length === 0) {
       list.innerHTML = `<div class="no-result">暂无推荐商品</div>`;
@@ -139,9 +153,10 @@ function renderResults(filterText) {
       return;
     }
   } else {
-    // 使用 Fuse 搜索
+    // ===== 使用 Fuse.js 模糊搜索 =====
     const results = fuseInstance.search(text);
     matched = results.map(r => r.item);
+
     if (matched.length === 0) {
       list.innerHTML = `<div class="no-result">没找到，试试其他词</div>`;
       list.classList.add('show');
@@ -149,7 +164,7 @@ function renderResults(filterText) {
     }
   }
 
-  // 排序（仅对搜索匹配结果有效）
+  // 排序
   if (text !== '') {
     switch (currentSort) {
       case 'price-asc': matched.sort((a, b) => a.price - b.price); break;
@@ -171,7 +186,7 @@ function renderResults(filterText) {
     }
   }
 
-  // 挑衅头部
+  // 挑衅头部（仅搜索时显示）
   let headerMsg = '';
   if (text !== '') {
     const taunts = [
@@ -192,10 +207,14 @@ function renderResults(filterText) {
     }
 
     let tag = '';
+    let qtyDisplay = '';
+
     if (p.sourceType === 'official') {
       tag = `<span class="tag" style="border-color:#E85D04; color:#E85D04;">官方·${p.shop}</span>`;
     } else {
       tag = `<span class="tag" style="border-color:#6a7a5a; color:#b0c0a0;">玩家·${p.seller}</span>`;
+      // 玩家商品显示剩余数量
+      qtyDisplay = `<span class="qty" style="color:#7a7265; font-size:0.8rem;">剩余 ${p.displayQty || p.qty || 0} 个</span>`;
     }
 
     let coordDisplay = '';
@@ -203,14 +222,8 @@ function renderResults(filterText) {
       coordDisplay = `<span class="coord">(${p.x}, ${p.y}, ${p.z})</span>`;
     }
 
-    // 玩家商品显示剩余数量
-    let qtyDisplay = '';
-    if (p.sourceType === 'player') {
-      qtyDisplay = `<span style="color:#7a7265; font-size:0.75rem;">剩余 ${p.qty} 个</span>`;
-    }
-
     html += `
-      <div class="result-item" data-name="${p.name}" data-id="${p.id || ''}">
+      <div class="result-item" data-name="${p.name}">
         <span class="name">${displayName}</span>
         <span class="meta">
           <span class="price">${p.price} 泥土</span>
@@ -234,7 +247,7 @@ const resultsList = document.getElementById('resultsList');
 let debounceTimer;
 input.addEventListener('input', function() {
   clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => renderResults(this.value), 300);
+  debounceTimer = setTimeout(() => renderResults(this.value), 200);
 });
 
 searchBtn.addEventListener('click', () => renderResults(input.value));
@@ -289,7 +302,7 @@ document.querySelectorAll('.sort-btn').forEach(btn => {
   });
 });
 
-// ========== Rough.js 手绘描边 ==========
+// ========== Rough.js 手绘描边（不变） ==========
 function applyRough() {
   if (typeof rough === 'undefined') return;
   document.querySelectorAll('#roughSearch canvas, .nav-btn canvas').forEach(c => c.remove());
@@ -328,7 +341,7 @@ function applyRough() {
 }
 
 window.addEventListener('load', function() {
-  loadAllData();
+  loadAllCSV();
   setTimeout(applyRough, 600);
 });
 
