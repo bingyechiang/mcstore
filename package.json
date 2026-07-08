@@ -1,6 +1,5 @@
 {
-  "name": "mctstore",
   "dependencies": {
-    "@vercel/kv": "^2.0.0"
+    "@vercel/redis": "^2.0.0"
   }
 }
