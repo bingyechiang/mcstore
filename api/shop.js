@@ -1,7 +1,22 @@
 // /api/shop.js
-import { redis } from "@vercel/redis";
+import { createClient } from "redis";
 
-const STORAGE_KEY = 'player_shop_items';
+const client = createClient({
+  url: process.env.REDIS_URL
+});
+client.on("error", (err) => {
+  console.error("Redis Error:", err);
+});
+let connected = false;
+async function redis() {
+  if (!connected) {
+    await client.connect();
+    connected = true;
+  }
+  return client;
+}
+
+const STORAGE_KEY = "player_shop_items";
 
 function getIP(req) {
   return req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown';
@@ -42,16 +57,13 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const raw = await redis.get(STORAGE_KEY);
+      const raw = await (await redis()).get(STORAGE_KEY);
       let items = [];
       if (raw) {
         try {
-          // 解码并解析
-          const decoded = decodeURIComponent(raw);
-          items = JSON.parse(decoded);
+          items = JSON.parse(raw);
         } catch (_) {
-          // 如果解码失败，尝试直接解析（兼容旧数据）
-          try { items = JSON.parse(raw); } catch (__) { items = []; }
+          items = [];
         }
       }
       return res.status(200).json({ items });
@@ -78,25 +90,21 @@ export default async function handler(req, res) {
       const cleanPrice = parseInt(price);
       const cleanQty = parseInt(qty);
 
-      // 读取现有数据
-      const raw = await redis.get(STORAGE_KEY);
+      const raw = await (await redis()).get(STORAGE_KEY);
       let items = [];
       if (raw) {
         try {
-          const decoded = decodeURIComponent(raw);
-          items = JSON.parse(decoded);
+          items = JSON.parse(raw);
         } catch (_) {
-          try { items = JSON.parse(raw); } catch (__) { items = []; }
+          items = [];
         }
       }
 
-      // 同名去重
       const exists = items.find(i => i.name === cleanName && i.seller === cleanSeller);
       if (exists) {
         return res.status(400).json({ error: '你已经挂过这个了，别刷屏' });
       }
 
-      // 卖家日限流（50件/天）
       const today = new Date().toISOString().split('T')[0];
       const sellerDailyKey = `seller:${cleanSeller}:${today}`;
       if (!global.sellerDaily) global.sellerDaily = new Map();
@@ -105,8 +113,10 @@ export default async function handler(req, res) {
         return res.status(429).json({ error: '今天已发 50 件，你是要开店吗？歇歇吧' });
       }
 
-      // 存储阈值（30MB限制，留5MB余量）
-      const rawSize = new Blob([JSON.stringify(items)]).size;
+      const rawSize = Buffer.byteLength(
+        JSON.stringify(items),
+        "utf8"
+      );
       if (rawSize > 25 * 1024 * 1024) {
         return res.status(507).json({ error: '集市货架快满了（>25MB），联系服主清理' });
       }
@@ -122,9 +132,10 @@ export default async function handler(req, res) {
       };
       items.unshift(newItem);
 
-      // 关键修复：先 JSON.stringify，再 encodeURIComponent 存
-      const toStore = encodeURIComponent(JSON.stringify(items));
-      await redis.set(STORAGE_KEY, toStore);
+      await (await redis()).set(
+        STORAGE_KEY,
+        JSON.stringify(items)
+      );
 
       global.sellerDaily.set(sellerDailyKey, sellerCount + 1);
 
