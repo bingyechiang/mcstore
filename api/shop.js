@@ -1,152 +1,193 @@
 // /api/shop.js
-import { createClient } from "redis";
+import { createClient } from 'redis';
 
-// ========== Redis 连接（单例，避免重复握手） ==========
-const client = createClient({
+const redis = createClient({
   url: process.env.REDIS_URL
 });
-client.on("error", (err) => console.error("Redis Client Error:", err));
+redis.on('error', (err) => console.error('Redis Error:', err));
 
-let connected = false;
-async function getRedis() {
-  if (!connected) {
-    await client.connect();
-    connected = true;
-  }
-  return client;
-}
+const STORAGE_KEY = 'player_shop_items';
+const FAIL_KEY = 'login_fail:';
+const LOCK_KEY = 'login_lock:';
 
-const STORAGE_KEY = "player_shop_items";
-
-// ========== 工具函数 ==========
 function getIP(req) {
-  return req.headers["x-forwarded-for"]?.split(",")[0] || req.socket.remoteAddress || "unknown";
+  return req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown';
 }
 
-// ========== 限流辅助函数（全部基于 Redis） ==========
-async function checkRateLimit(redis, key, limit, windowSeconds) {
-  const current = await redis.incr(key);
-  if (current === 1) {
-    // 首次访问，设置过期时间
-    await redis.expire(key, windowSeconds);
-  }
-  if (current > limit) {
-    return false;
-  }
-  return true;
+function getPasswordHash(password) {
+  // 简单 SHA-256（浏览器端和 Node 端都能算，这里用 Node 内置）
+  const crypto = require('crypto');
+  return crypto.createHash('sha256').update(password).digest('hex');
 }
 
-// ========== 主 Handler ==========
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  if (req.method === "OPTIONS") return res.status(200).end();
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const ip = getIP(req);
-  const redis = await getRedis();
+  const now = Date.now();
+
+  // ===== 全局限流（IP分钟级：15次/分） =====
+  if (!global.rateLimit) global.rateLimit = new Map();
+  const minKey = `min:${ip}`;
+  const minData = global.rateLimit.get(minKey);
+  if (minData && (now - minData.start) < 60000) {
+    if (minData.count >= 15) {
+      return res.status(429).json({ error: '手速太快，歇会儿再来' });
+    }
+    minData.count += 1;
+  } else {
+    global.rateLimit.set(minKey, { count: 1, start: now });
+  }
+
+  // ===== IP天级限流：500次/天 =====
+  const dayKey = `day:${ip}`;
+  const dayData = global.rateLimit.get(dayKey);
+  if (dayData && (now - dayData.start) < 86400000) {
+    if (dayData.count >= 500) {
+      return res.status(429).json({ error: '今日访问已达上限，明天再来' });
+    }
+    dayData.count += 1;
+  } else {
+    global.rateLimit.set(dayKey, { count: 1, start: now });
+  }
 
   try {
-    // ---- 1. IP 分钟限流：15 次 / 分钟 ----
-    const minKey = `ratelimit:min:${ip}`;
-    const minOk = await checkRateLimit(redis, minKey, 15, 60);
-    if (!minOk) {
-      return res.status(429).json({ error: "手速太快了（15次/分钟），歇会儿再来" });
-    }
+    await redis.connect();
 
-    // ---- 2. IP 天限流：500 次 / 天 ----
-    const dayKey = `ratelimit:day:${ip}`;
-    const dayOk = await checkRateLimit(redis, dayKey, 500, 86400);
-    if (!dayOk) {
-      return res.status(429).json({ error: "今日访问已达上限（500次），明天再来逛吧" });
-    }
-
-    // ---- GET：获取商品列表 ----
-    if (req.method === "GET") {
+    // ===== GET =====
+    if (req.method === 'GET') {
       const raw = await redis.get(STORAGE_KEY);
-      let items = [];
-      if (raw) {
-        try {
-          items = JSON.parse(raw);
-        } catch (_) {
-          items = [];
-        }
-      }
+      const items = raw ? JSON.parse(raw) : [];
+      await redis.quit();
       return res.status(200).json({ items });
     }
 
-    // ---- POST：发布商品 ----
-    if (req.method === "POST") {
-      const { name, price, qty, seller, icon } = req.body;
+    // ===== POST =====
+    if (req.method === 'POST') {
+      const { name, price, qty, seller, icon, password } = req.body;
 
-      // 基础校验
+      // --- 基础校验 ---
       if (!name || name.trim().length < 2) {
-        return res.status(400).json({ error: "商品名至少写俩字吧" });
+        await redis.quit();
+        return res.status(400).json({ error: '商品名至少写俩字' });
       }
       if (!price || parseInt(price) < 1) {
-        return res.status(400).json({ error: "单价至少 1 个泥土" });
+        await redis.quit();
+        return res.status(400).json({ error: '单价至少 1 个泥土' });
       }
       if (!qty || parseInt(qty) < 1) {
-        return res.status(400).json({ error: "数量至少 1 个" });
+        await redis.quit();
+        return res.status(400).json({ error: '数量至少 1 个' });
       }
       if (!seller || seller.trim().length < 1) {
-        return res.status(400).json({ error: "填个游戏ID，别害羞" });
+        await redis.quit();
+        return res.status(400).json({ error: '填个游戏ID' });
+      }
+      if (!password || password.trim().length < 4) {
+        await redis.quit();
+        return res.status(400).json({ error: '管理密码至少 4 位' });
       }
 
       const cleanName = name.trim();
       const cleanSeller = seller.trim();
       const cleanPrice = parseInt(price);
       const cleanQty = parseInt(qty);
+      const cleanPassword = password.trim();
+      const hash = getPasswordHash(cleanPassword);
 
-      // ---- 读取现有数据 ----
+      // --- 读取现有数据 ---
       const raw = await redis.get(STORAGE_KEY);
-      let items = [];
-      if (raw) {
-        try {
-          items = JSON.parse(raw);
-        } catch (_) {
-          items = [];
+      const items = raw ? JSON.parse(raw) : [];
+
+      // --- 检查该卖家是否已存在商品 ---
+      const sellerItems = items.filter(i => i.seller === cleanSeller);
+
+      if (sellerItems.length > 0) {
+        // 已有商品 → 验证密码
+        const storedHash = sellerItems[0].passwordHash;
+        if (storedHash !== hash) {
+          // ===== 密码错误 → IP 锁定计数 =====
+          const failKey = `${FAIL_KEY}${ip}`;
+          const failCount = await redis.get(failKey) || 0;
+          const newFailCount = parseInt(failCount) + 1;
+          await redis.set(failKey, newFailCount, { EX: 900 }); // 15分钟过期
+
+          if (newFailCount >= 5) {
+            await redis.set(`${LOCK_KEY}${ip}`, '1', { EX: 900 });
+            await redis.quit();
+            return res.status(403).json({ error: '密码错误次数过多，IP已被锁定15分钟' });
+          }
+
+          await redis.quit();
+          return res.status(403).json({
+            error: `密码错误（${newFailCount}/5），15分钟内错误5次将锁定IP`
+          });
         }
+      } else {
+        // 新卖家 → 直接记录密码
+        // （无需额外操作，下面保存时会带上 hash）
       }
 
-      // ---- 同卖家 + 同商品名 去重 ----
-      const exists = items.find((i) => i.name === cleanName && i.seller === cleanSeller);
+      // --- 检查该IP是否被锁定 ---
+      const locked = await redis.get(`${LOCK_KEY}${ip}`);
+      if (locked) {
+        await redis.quit();
+        return res.status(403).json({ error: 'IP已被锁定，15分钟后再试' });
+      }
+
+      // --- 同卖家同商品名去重 ---
+      const exists = items.find(i => i.name === cleanName && i.seller === cleanSeller);
       if (exists) {
-        return res.status(400).json({ error: "你已经挂过这个了，别刷屏" });
+        await redis.quit();
+        return res.status(400).json({ error: '你已经挂过这个了，别刷屏' });
       }
 
-      // ---- 卖家日限流：50 件 / 天（使用 Redis） ----
-      const today = new Date().toISOString().split("T")[0];
-      const sellerKey = `seller:${cleanSeller}:${today}`;
-      const sellerOk = await checkRateLimit(redis, sellerKey, 50, 86400);
-      if (!sellerOk) {
-        return res.status(429).json({ error: "今天已发 50 件，你是要开店吗？歇歇吧" });
+      // --- 卖家日限流（50件/天） ---
+      const today = new Date().toISOString().split('T')[0];
+      const sellerDailyKey = `seller:${cleanSeller}:${today}`;
+      if (!global.sellerDaily) global.sellerDaily = new Map();
+      const sellerCount = global.sellerDaily.get(sellerDailyKey) || 0;
+      if (sellerCount >= 50) {
+        await redis.quit();
+        return res.status(429).json({ error: '今天已发50件，你是要开店吗' });
       }
 
-      // ---- 存储阈值：25 MB 预警 ----
-      const rawSize = Buffer.byteLength(JSON.stringify(items), "utf8");
+      // --- 存储阈值（25MB预警） ---
+      const rawSize = Buffer.byteLength(JSON.stringify(items), 'utf8');
       if (rawSize > 25 * 1024 * 1024) {
-        return res.status(507).json({ error: "集市货架快满了（>25MB），联系服主清理" });
+        await redis.quit();
+        return res.status(507).json({ error: '集市货架快满了（>25MB），联系服主清理' });
       }
 
-      // ---- 写入新商品 ----
+      // --- 发布成功 ---
       const newItem = {
         id: Date.now() + Math.random().toString(36).substring(2, 8),
         name: cleanName,
         price: cleanPrice,
         qty: cleanQty,
         seller: cleanSeller,
-        icon: icon || "/img/dirt.png",
-        createdAt: Date.now(),
+        icon: icon || '/img/dirt.png',
+        passwordHash: hash,
+        createdAt: Date.now()
       };
       items.unshift(newItem);
       await redis.set(STORAGE_KEY, JSON.stringify(items));
+      global.sellerDaily.set(sellerDailyKey, sellerCount + 1);
 
+      // --- 清空该IP的密码失败计数（发布成功视为身份验证通过） ---
+      await redis.del(`${FAIL_KEY}${ip}`);
+
+      await redis.quit();
       return res.status(200).json({ items });
     }
 
-    res.status(405).json({ error: "Method Not Allowed" });
+    await redis.quit();
+    res.status(405).json({ error: 'Method Not Allowed' });
   } catch (err) {
-    console.error("API Error:", err);
-    res.status(500).json({ error: "服务器内部错误: " + err.message });
+    console.error('API Error:', err);
+    try { await redis.quit(); } catch (_) {}
+    res.status(500).json({ error: '服务器内部错误: ' + err.message });
   }
 }
