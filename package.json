@@ -1,0 +1,6 @@
+{
+  "name": "mctstore",
+  "dependencies": {
+    "@vercel/kv": "^2.0.0"
+  }
+}
