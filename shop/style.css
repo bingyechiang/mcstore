@@ -316,3 +316,109 @@
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   }
 }
+
+/* ===== 管理面板 ===== */
+.manage-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.5rem;
+  padding: 0.6rem 1rem;
+  background: #0f0f0f;
+  border-radius: 30px;
+  border: 1px dashed #3a3a3a;
+  cursor: pointer;
+  color: #8a847a;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  user-select: none;
+}
+.manage-toggle:hover {
+  border-color: #E85D04;
+  color: #ece7db;
+}
+.manage-toggle .arrow {
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.manage-toggle .arrow.open {
+  transform: rotate(90deg);
+}
+
+.manage-panel {
+  display: none;
+  margin-top: 0.8rem;
+  padding: 1rem;
+  background: #0f0f0f;
+  border-radius: 20px;
+  border: 1px solid #2a2a2a;
+}
+.manage-panel.open {
+  display: block;
+}
+.manage-panel .form-group input {
+  margin-bottom: 0.3rem;
+}
+#manageBtn {
+  width: 100%;
+  background: #2a2a2a;
+  border: none;
+  color: #d4cdb8;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 0.6rem;
+  border-radius: 40px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  font-family: inherit;
+  letter-spacing: 1px;
+  margin-top: 0.3rem;
+}
+#manageBtn:hover {
+  background: #3a3a3a;
+  transform: scale(0.97);
+}
+
+#manageResults {
+  margin-top: 0.8rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+#manageResults .manage-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px dashed #2a2a2a;
+  color: #d4cdb8;
+  font-size: 0.85rem;
+}
+#manageResults .manage-item:last-child {
+  border-bottom: none;
+}
+#manageResults .manage-item .del-btn {
+  background: #5a2a2a;
+  border: none;
+  color: #e85a5a;
+  padding: 0.1rem 0.8rem;
+  border-radius: 20px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.75rem;
+  transition: all 0.2s;
+}
+#manageResults .manage-item .del-btn:hover {
+  background: #7a2a2a;
+  transform: scale(0.95);
+}
+#manageResults .empty-msg {
+  color: #6a655a;
+  text-align: center;
+  padding: 0.8rem 0;
+  font-size: 0.9rem;
+}
+#manageResults .error-msg {
+  color: #e85a5a;
+  text-align: center;
+  padding: 0.8rem 0;
+  font-size: 0.9rem;
+}
