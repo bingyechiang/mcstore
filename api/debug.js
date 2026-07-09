@@ -2,24 +2,27 @@
 import { createClient } from 'redis';
 import crypto from 'crypto';
 
-const redis = createClient({ url: process.env.REDIS_URL });
+const REDIS_URL = process.env.REDIS_URL;
+const ADMIN_HASH = process.env.ADMIN_PASSWORD_HASH; // 你设定的哈希值
+
+// 如果没设置环境变量，直接返回错误，避免连接失败
+if (!REDIS_URL) {
+  console.error('❌ 缺少 REDIS_URL 环境变量');
+}
+if (!ADMIN_HASH) {
+  console.error('❌ 缺少 ADMIN_PASSWORD_HASH 环境变量');
+}
+
+const redis = createClient({ url: REDIS_URL });
 redis.on('error', (err) => console.error('Redis Error:', err));
 
 const STORAGE_KEY = 'player_shop_items';
-const ADMIN_HASH = process.env.ADMIN_PASSWORD_HASH; // 你在环境变量里设置
-const TOKEN_EXPIRY = 3600; // 1小时
-
-// 内存存储token（简单，但Vercel冷启动会丢失，不影响）
+const TOKEN_EXPIRY = 3600;
 const tokenStore = new Map();
 
-function getIP(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown';
+function hashPassword(pwd) {
+  return crypto.createHash('sha256').update(pwd).digest('hex');
 }
-
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password).digest('hex');
-}
-
 function generateToken() {
   return crypto.randomBytes(32).toString('hex');
 }
@@ -29,14 +32,20 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // 解析路径
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const path = url.pathname.replace(/^\/api\/debug/, '');
+  // 环境变量检查
+  if (!REDIS_URL || !ADMIN_HASH) {
+    return res.status(500).json({
+      error: '服务器配置缺失：请设置 REDIS_URL 和 ADMIN_PASSWORD_HASH'
+    });
+  }
+
+  // 解析路径（简单可靠）
+  const path = req.url.replace(/^\/api\/debug/, '').split('?')[0];
 
   try {
     await redis.connect();
 
-    // ===== 登录 =====
+    // ----- 登录 -----
     if (req.method === 'POST' && path === '/login') {
       const { password } = req.body;
       if (!password) {
@@ -54,7 +63,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ token });
     }
 
-    // ===== 验证token（中间件） =====
+    // ----- 验证 token（中间件）-----
     const auth = req.headers.authorization;
     if (!auth || !auth.startsWith('Bearer ')) {
       await redis.quit();
@@ -70,7 +79,7 @@ export default async function handler(req, res) {
     // 续期
     session.expiry = Date.now() + TOKEN_EXPIRY * 1000;
 
-    // ===== GET /items =====
+    // ----- GET /items -----
     if (req.method === 'GET' && path === '/items') {
       const raw = await redis.get(STORAGE_KEY);
       const items = raw ? JSON.parse(raw) : [];
@@ -78,7 +87,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ items });
     }
 
-    // ===== PUT /items/:id =====
+    // ----- PUT /items/:id -----
     if (req.method === 'PUT' && path.startsWith('/items/')) {
       const id = path.split('/')[2];
       if (!id) {
@@ -86,7 +95,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: '缺少ID' });
       }
       const { name, price, qty, seller, icon } = req.body;
-      // 基本校验
       if (!name || name.trim().length < 2) {
         await redis.quit();
         return res.status(400).json({ error: '商品名至少俩字' });
@@ -111,7 +119,6 @@ export default async function handler(req, res) {
         await redis.quit();
         return res.status(404).json({ error: '商品不存在' });
       }
-      // 更新字段（保留passwordHash不变）
       items[index].name = name.trim();
       items[index].price = parseInt(price);
       items[index].qty = parseInt(qty);
@@ -122,7 +129,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ items });
     }
 
-    // ===== DELETE /items/:id =====
+    // ----- DELETE /items/:id -----
     if (req.method === 'DELETE' && path.startsWith('/items/')) {
       const id = path.split('/')[2];
       if (!id) {
@@ -146,6 +153,6 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('Debug API Error:', err);
     try { await redis.quit(); } catch (_) {}
-    res.status(500).json({ error: '服务器内部错误: ' + err.message });
+    res.status(500).json({ error: '服务器错误: ' + err.message });
   }
 }
