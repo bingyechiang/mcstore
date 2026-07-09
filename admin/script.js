@@ -1,4 +1,4 @@
-// ===== 管理面板逻辑 =====
+// 管理面板の逻辑
 
 let currentItems = [];
 let editingCell = null;
@@ -14,7 +14,7 @@ const tableBody = document.getElementById('tableBody');
 const countEl = document.getElementById('itemCount');
 const refreshBtn = document.getElementById('refreshBtn');
 
-// ===== 工具：安全加载图标 =====
+// ===== 工具：安全加载图标 =====（这一行还是和之前一个bug）
 function safeIcon(url) {
   if (!url) return DEFAULT_ICON;
   // 如果存的是名称，尝试从全局 iconMap 取 URL
@@ -39,14 +39,14 @@ function iconImgTag(url, className = 'cell-icon') {
                 style="display:inline-block;">`;
 }
 
-// ===== 从 localStorage 读取密钥 =====
+// 读取密钥
 const savedKey = localStorage.getItem('adminKey');
 if (savedKey) {
   keyInput.value = savedKey;
   unlockAdmin(savedKey);
 }
 
-// ===== 解锁 =====
+// 解锁
 keySubmitBtn.addEventListener('click', function() {
   const key = keyInput.value.trim();
   if (!key) {
@@ -81,7 +81,7 @@ async function unlockAdmin(key) {
   }
 }
 
-// ===== 加载商品 =====
+// 查看商品
 async function loadItems(key) {
   try {
     const res = await fetch('/api/admin', {
@@ -98,7 +98,7 @@ async function loadItems(key) {
   }
 }
 
-// ===== 渲染表格 =====
+// 表格
 function renderTable(items) {
   if (!items || items.length === 0) {
     tableBody.innerHTML = `<tr class="empty-row"><td colspan="7">货架空空如也</td></tr>`;
@@ -125,7 +125,7 @@ function renderTable(items) {
   });
   tableBody.innerHTML = html;
 
-  // 事件：点击单元格编辑
+  // 点击单元格编辑
   tableBody.querySelectorAll('.editable[data-field]').forEach(el => {
     el.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -133,7 +133,7 @@ function renderTable(items) {
     });
   });
 
-  // 事件：删除按钮
+  // 删除按钮
   tableBody.querySelectorAll('.del-btn').forEach(btn => {
     btn.addEventListener('click', function() {
       const id = this.dataset.id;
@@ -143,7 +143,7 @@ function renderTable(items) {
   });
 }
 
-// ===== 编辑单元格 =====
+// 编辑单格
 function startEditing(el) {
   if (editingCell) finishEditing(editingCell);
 
@@ -260,7 +260,7 @@ function cancelEditing(cell) {
   editingCell = null;
 }
 
-// ===== 删除商品 =====
+// 删除
 async function deleteItem(id) {
   try {
     const key = localStorage.getItem('adminKey');
@@ -283,20 +283,20 @@ async function deleteItem(id) {
   }
 }
 
-// ===== 刷新按钮 =====
+// 刷新
 refreshBtn.addEventListener('click', function() {
   const key = localStorage.getItem('adminKey');
   if (key) loadItems(key);
 });
 
-// ===== 工具：防XSS =====
+//房xxs
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-// ===== 加载图标映射（用于名称转URL，提升编辑体验） =====
+// 图标
 async function loadIconMap() {
   try {
     const [blockRes, itemRes] = await Promise.all([
@@ -322,7 +322,7 @@ async function loadIconMap() {
   }
 }
 
-// ===== Rough.js 手绘描边 =====
+// rough.js（不想写了）
 function applyRough() {
   if (typeof rough === 'undefined') return;
   const tableWrap = document.querySelector('.admin-table-wrap');
@@ -347,15 +347,15 @@ function applyRough() {
   });
 }
 
-// ===== 初始化 =====
+// 初始化
 async function init() {
   await loadIconMap();
-  // 如果已有密钥且已解锁，加载数据
+  // 如果有密钥且已解锁，加载数据
   const key = localStorage.getItem('adminKey');
   if (key && adminContent.style.display !== 'none') {
     await loadItems(key);
   }
-  // 手绘描边（延迟等待DOM渲染）
+  // 手绘描边
   setTimeout(applyRough, 500);
 }
 
