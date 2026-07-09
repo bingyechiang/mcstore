@@ -1,4 +1,4 @@
-// ========== 全局状态 ==========
+// 没错，我还是全局状态
 let allShopItems = [];
 let iconMap = {};
 let iconList = [];
@@ -9,7 +9,7 @@ let currentSort = 'latest';
 
 const DEFAULT_ICON = '/img/dirt.png';
 
-// DOM 引用
+// DOM
 const grid = document.getElementById('cardGrid');
 const countEl = document.getElementById('itemCount');
 const form = document.getElementById('publishForm');
@@ -32,7 +32,7 @@ const managePassword = document.getElementById('managePassword');
 const manageBtn = document.getElementById('manageBtn');
 const manageResults = document.getElementById('manageResults');
 
-// ========== 工具函数：安全获取图标 URL ==========
+// 图标（有bug，只好去问deepseek）（这一段fuction是AI写的）
 function safeIcon(url) {
   if (!url) return DEFAULT_ICON;
   // 如果存的是名称，从映射取 URL
@@ -47,7 +47,7 @@ function safeIcon(url) {
   return DEFAULT_ICON;
 }
 
-// ========== 加载图标库 ==========
+// ========== 加载图标库 ==========（你没看错，这一段的bug和上面一样，AI帮忙修了）（AI太好用了）
 async function loadIcons() {
   try {
     const [blockRes, itemRes] = await Promise.all([
@@ -83,7 +83,7 @@ async function loadIcons() {
   }
 }
 
-// ========== 图标搜索 ==========
+// ========== 图标搜索 ==========（你也没看错，这一段也有bug，不过没事，这一段只有下面十行左右是AI改的）
 function searchIcons(query) {
   if (!query.trim()) {
     iconDropdown.classList.remove('show');
@@ -121,7 +121,7 @@ function searchIcons(query) {
   iconDropdown.classList.add('show');
 }
 
-// ===== 点击图标下拉选项 =====
+// 图标选择（这一段不是AI（doge））
 iconDropdown.addEventListener('click', function(e) {
   const option = e.target.closest('.icon-option');
   if (!option) return;
@@ -149,7 +149,7 @@ iconSearch.addEventListener('blur', function() {
   setTimeout(() => iconDropdown.classList.remove('show'), 200);
 });
 
-// ========== 渲染商品卡片 ==========
+// 商品
 function renderItems(items) {
   if (!items || items.length === 0) {
     grid.innerHTML = `<div class="empty-state">集市还空着，你是第一个敢吃螃蟹的</div>`;
@@ -168,7 +168,7 @@ function renderItems(items) {
   sorted.forEach((item) => {
     const rawIcon = item.icon || DEFAULT_ICON;
     let iconUrl = safeIcon(rawIcon);
-    // 如果 iconUrl 是完整的 https，准备一个 http 备选
+    //这一段的bug和前面几个都一样，deepseek太好用了
     const fallbackUrl = iconUrl.startsWith('https://') ? iconUrl.replace('https:', 'http:') : iconUrl;
     const rot = (Math.random() * 3 - 1.5).toFixed(1);
     html += `
@@ -198,7 +198,7 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// ========== 加载商品列表 ==========
+// 商品列表（剩下都不是AI了）
 async function fetchItems() {
   try {
     const res = await fetch('/api/shop');
@@ -212,7 +212,7 @@ async function fetchItems() {
   }
 }
 
-// ========== 发布商品 ==========
+// 
 form.addEventListener('submit', async function(e) {
   e.preventDefault();
   const name = nameInput.value.trim();
@@ -264,7 +264,7 @@ form.addEventListener('submit', async function(e) {
   }
 });
 
-// ========== Toast ==========
+// 吐司
 function showToast(msg) {
   const old = document.querySelector('.toast');
   if (old) old.remove();
@@ -275,7 +275,7 @@ function showToast(msg) {
   setTimeout(() => div.remove(), 4000);
 }
 
-// ========== 排序 ==========
+// 排序
 document.querySelectorAll('.shop-sort .sort-btn').forEach(btn => {
   btn.addEventListener('click', function() {
     document.querySelectorAll('.shop-sort .sort-btn').forEach(b => b.classList.remove('active'));
@@ -285,13 +285,13 @@ document.querySelectorAll('.shop-sort .sort-btn').forEach(btn => {
   });
 });
 
-// ========== 管理面板折叠 ==========
+// 普通用户
 manageToggle.addEventListener('click', function() {
   managePanel.classList.toggle('open');
   this.querySelector('.arrow').classList.toggle('open');
 });
 
-// ========== 管理：查询我的商品 ==========
+// 查询商品
 manageBtn.addEventListener('click', async function() {
   const seller = manageSeller.value.trim();
   const password = managePassword.value.trim();
@@ -341,7 +341,7 @@ manageBtn.addEventListener('click', async function() {
     });
     manageResults.innerHTML = html;
 
-    // 下架按钮事件
+    // 下架按钮
     manageResults.querySelectorAll('.del-btn').forEach(btn => {
       btn.addEventListener('click', async function() {
         const id = this.dataset.id;
@@ -362,9 +362,7 @@ manageBtn.addEventListener('click', async function() {
           return;
         }
         showToast('已下架');
-        // 刷新管理列表
         manageBtn.click();
-        // 刷新主列表
         fetchItems();
       });
     });
@@ -377,7 +375,7 @@ manageBtn.addEventListener('click', async function() {
   }
 });
 
-// ========== 初始化 ==========
+// 现成的库真好用（rough.js初始化）
 async function init() {
   await loadIcons();
   await fetchItems();
@@ -385,7 +383,7 @@ async function init() {
   if (typeof rough !== 'undefined') {
     const formArea = document.getElementById('roughForm');
     if (formArea) {
-      // 清除旧的 canvas
+      // 清除旧的canvas
       formArea.querySelectorAll('canvas').forEach(c => c.remove());
       const rect = formArea.getBoundingClientRect();
       const canvas = document.createElement('canvas');
