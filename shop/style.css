@@ -1,5 +1,4 @@
-/* ===== 交易中心专有样式 ===== */
-/* 复用全局 .container，但增加 flex 方向 */
+/* ===== 交易中心の样式 ===== */
 .shop-container {
   gap: 2rem;
 }
@@ -11,7 +10,7 @@
   align-items: flex-start;
 }
 
-/* 商品列表区域（左侧主区域） */
+/* 商品列表 */
 .shop-list {
   flex: 2 1 600px;
   min-width: 300px;
@@ -44,7 +43,7 @@
   border: 1px solid #2a2a2a;
 }
 
-/* 排序按钮（复用全局 .sort-btn 但放在 shop 内） */
+/* 排序按钮 */
 .shop-sort {
   justify-content: flex-start;
   padding-left: 0.5rem;
@@ -258,7 +257,7 @@
   transform: scale(0.94);
 }
 
-/* 空状态 */
+/* 空状态（还好没bug） */
 .empty-state {
   grid-column: 1 / -1;
   text-align: center;
@@ -270,7 +269,7 @@
   background: #0f0f0f;
 }
 
-/* Toast 提示 */
+/* 吐司提示 */
 .toast {
   position: fixed;
   bottom: 2rem;
@@ -317,7 +316,7 @@
   }
 }
 
-/* ===== 管理面板 ===== */
+/* 普通用户管理 */
 .manage-toggle {
   display: flex;
   justify-content: space-between;
