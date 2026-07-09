@@ -3,15 +3,11 @@ import { createClient } from 'redis';
 import crypto from 'crypto';
 
 const REDIS_URL = process.env.REDIS_URL;
-const ADMIN_HASH = process.env.ADMIN_PASSWORD_HASH; // 你设定的哈希值
+const ADMIN_HASH = process.env.ADMIN_PASSWORD_HASH;
 
-// 如果没设置环境变量，直接返回错误，避免连接失败
-if (!REDIS_URL) {
-  console.error('❌ 缺少 REDIS_URL 环境变量');
-}
-if (!ADMIN_HASH) {
-  console.error('❌ 缺少 ADMIN_PASSWORD_HASH 环境变量');
-}
+// 环境变量检查（不阻止启动，只打印警告）
+if (!REDIS_URL) console.error('缺少 REDIS_URL 环境变量');
+if (!ADMIN_HASH) console.error('缺少 ADMIN_PASSWORD_HASH 环境变量');
 
 const redis = createClient({ url: REDIS_URL });
 redis.on('error', (err) => console.error('Redis Error:', err));
@@ -23,6 +19,7 @@ const tokenStore = new Map();
 function hashPassword(pwd) {
   return crypto.createHash('sha256').update(pwd).digest('hex');
 }
+
 function generateToken() {
   return crypto.randomBytes(32).toString('hex');
 }
@@ -32,14 +29,11 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // 环境变量检查
+  // 环境变量缺失直接报错
   if (!REDIS_URL || !ADMIN_HASH) {
-    return res.status(500).json({
-      error: '服务器配置缺失：请设置 REDIS_URL 和 ADMIN_PASSWORD_HASH'
-    });
+    return res.status(500).json({ error: '服务器配置缺失：请设置 REDIS_URL 和 ADMIN_PASSWORD_HASH' });
   }
 
-  // 解析路径（简单可靠）
   const path = req.url.replace(/^\/api\/debug/, '').split('?')[0];
 
   try {
@@ -63,7 +57,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ token });
     }
 
-    // ----- 验证 token（中间件）-----
+    // ----- 验证 token -----
     const auth = req.headers.authorization;
     if (!auth || !auth.startsWith('Bearer ')) {
       await redis.quit();
@@ -76,7 +70,6 @@ export default async function handler(req, res) {
       await redis.quit();
       return res.status(401).json({ error: '登录已过期' });
     }
-    // 续期
     session.expiry = Date.now() + TOKEN_EXPIRY * 1000;
 
     // ----- GET /items -----
