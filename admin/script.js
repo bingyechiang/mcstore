@@ -2,7 +2,9 @@
 
 let currentItems = [];
 let editingCell = null;
+const DEFAULT_ICON = '/img/dirt.png';
 
+// DOM 引用
 const keyInput = document.getElementById('adminKeyInput');
 const keySubmitBtn = document.getElementById('keySubmitBtn');
 const keyError = document.getElementById('keyError');
@@ -12,12 +14,35 @@ const tableBody = document.getElementById('tableBody');
 const countEl = document.getElementById('itemCount');
 const refreshBtn = document.getElementById('refreshBtn');
 
-// 从 localStorage 读取已保存的密钥
-const savedKey = localStorage.getItem('adminKey');
+// ===== 工具：安全加载图标 =====
+function safeIcon(url) {
+  if (!url) return DEFAULT_ICON;
+  // 如果存的是名称，尝试从全局 iconMap 取 URL
+  if (window.iconMap && window.iconMap[url]) {
+    return window.iconMap[url];
+  }
+  // 如果链接不是 http 开头，也不是 / 开头，回退默认
+  if (!url.startsWith('http') && !url.startsWith('/')) {
+    return DEFAULT_ICON;
+  }
+  return url;
+}
 
+// 生成图片标签（带自动重试）
+function iconImgTag(url, className = 'cell-icon') {
+  const safeUrl = safeIcon(url);
+  return `<img src="${safeUrl}" 
+                class="${className}" 
+                loading="lazy" 
+                onerror="this.onerror=null; this.src='${safeUrl.replace(/^https:/, 'http:')}';"
+                onload="this.style.display='block'" 
+                style="display:inline-block;">`;
+}
+
+// ===== 从 localStorage 读取密钥 =====
+const savedKey = localStorage.getItem('adminKey');
 if (savedKey) {
   keyInput.value = savedKey;
-  // 自动尝试解锁
   unlockAdmin(savedKey);
 }
 
@@ -46,7 +71,6 @@ async function unlockAdmin(key) {
       keyError.textContent = data.error || '密钥错误';
       return;
     }
-    // 成功
     localStorage.setItem('adminKey', key);
     keyError.textContent = '';
     keySection.style.display = 'none';
@@ -83,7 +107,7 @@ function renderTable(items) {
 
   let html = '';
   items.forEach(item => {
-    const icon = item.icon || '/img/dirt.png';
+    const iconHtml = iconImgTag(item.icon, 'cell-icon');
     html += `
       <tr data-id="${item.id}">
         <td><span class="editable" data-field="id" style="color:#6a655a;font-size:0.7rem;">${item.id}</span></td>
@@ -92,8 +116,8 @@ function renderTable(items) {
         <td><span class="editable" data-field="qty">${item.qty}</span></td>
         <td><span class="editable" data-field="seller">${escapeHtml(item.seller)}</span></td>
         <td>
-          <img src="${icon}" class="cell-icon" loading="lazy" onerror="this.style.display='none'">
-          <span class="editable" data-field="icon" style="display:none;">${icon}</span>
+          ${iconHtml}
+          <span class="editable" data-field="icon" style="display:none;">${item.icon || ''}</span>
         </td>
         <td><button class="del-btn" data-id="${item.id}">删</button></td>
       </tr>
@@ -101,7 +125,7 @@ function renderTable(items) {
   });
   tableBody.innerHTML = html;
 
-  // ===== 事件：点击单元格编辑 =====
+  // 事件：点击单元格编辑
   tableBody.querySelectorAll('.editable[data-field]').forEach(el => {
     el.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -109,7 +133,7 @@ function renderTable(items) {
     });
   });
 
-  // ===== 事件：删除按钮 =====
+  // 事件：删除按钮
   tableBody.querySelectorAll('.del-btn').forEach(btn => {
     btn.addEventListener('click', function() {
       const id = this.dataset.id;
@@ -121,7 +145,6 @@ function renderTable(items) {
 
 // ===== 编辑单元格 =====
 function startEditing(el) {
-  // 如果已有编辑中的单元格，先保存
   if (editingCell) finishEditing(editingCell);
 
   const field = el.dataset.field;
@@ -129,13 +152,12 @@ function startEditing(el) {
   const tr = el.closest('tr');
   const id = tr.dataset.id;
 
-  // 图标字段特殊处理：显示输入框让用户输入URL
   let input;
   if (field === 'icon') {
     input = document.createElement('input');
     input.type = 'text';
     input.value = currentValue;
-    input.placeholder = '图标URL';
+    input.placeholder = '图标URL或名称';
   } else {
     input = document.createElement('input');
     input.type = field === 'price' || field === 'qty' ? 'number' : 'text';
@@ -152,7 +174,6 @@ function startEditing(el) {
 
   editingCell = { el, field, id, input };
 
-  // 按回车保存，按Esc取消
   input.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -164,7 +185,6 @@ function startEditing(el) {
     }
   });
 
-  // 失焦自动保存
   input.addEventListener('blur', function() {
     if (editingCell) finishEditing(editingCell);
   });
@@ -176,38 +196,41 @@ async function finishEditing(cell) {
   const newValue = input.value.trim();
   editingCell = null;
 
-  // 恢复显示
   el.classList.remove('editing');
   el.textContent = newValue || '(空)';
 
-  // 构建更新数据
   const updateData = { id };
   let parsedValue;
   if (field === 'price' || field === 'qty') {
     parsedValue = parseInt(newValue);
     if (isNaN(parsedValue) || parsedValue < 1) {
-      // 无效值，回滚
       await loadItems(localStorage.getItem('adminKey'));
       return;
     }
     updateData[field] = parsedValue;
   } else if (field === 'icon') {
-    updateData[field] = newValue || '/img/dirt.png';
+    updateData[field] = newValue || DEFAULT_ICON;
     // 刷新该行的图标预览
     const tr = el.closest('tr');
     const img = tr.querySelector('.cell-icon');
-    if (img) img.src = updateData[field];
+    if (img) {
+      const safeUrl = safeIcon(updateData[field]);
+      img.src = safeUrl;
+      img.onerror = function() {
+        this.onerror = null;
+        this.src = safeUrl.replace(/^https:/, 'http:');
+      };
+    }
   } else {
     updateData[field] = newValue || '未命名';
   }
 
-  // 如果值没变，不做请求
+  // 如果值没变，不请求
   const oldItem = currentItems.find(i => i.id === id);
   if (oldItem && oldItem[field] == updateData[field]) {
     return;
   }
 
-  // 发送更新
   try {
     const key = localStorage.getItem('adminKey');
     const res = await fetch('/api/admin', {
@@ -222,11 +245,9 @@ async function finishEditing(cell) {
       const data = await res.json();
       throw new Error(data.error || '更新失败');
     }
-    // 刷新列表
     await loadItems(key);
   } catch (err) {
     console.error('更新失败', err);
-    // 回滚
     await loadItems(localStorage.getItem('adminKey'));
   }
 }
@@ -268,34 +289,81 @@ refreshBtn.addEventListener('click', function() {
   if (key) loadItems(key);
 });
 
-// ===== 工具函数 =====
+// ===== 工具：防XSS =====
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-// ===== Rough.js 描边 =====
-window.addEventListener('load', function() {
-  setTimeout(function() {
-    if (typeof rough !== 'undefined') {
-      const tableWrap = document.querySelector('.admin-table-wrap');
-      if (tableWrap) {
-        const rect = tableWrap.getBoundingClientRect();
-        const canvas = document.createElement('canvas');
-        canvas.width = rect.width + 20;
-        canvas.height = rect.height + 20;
-        canvas.style.cssText = 'position:absolute;top:-10px;left:-10px;pointer-events:none;z-index:0;';
-        tableWrap.style.position = 'relative';
-        tableWrap.appendChild(canvas);
-        const rc = rough.canvas(canvas);
-        rc.rectangle(0, 0, canvas.width, canvas.height, {
-          stroke: '#E85D04',
-          strokeWidth: 2,
-          roughness: 2.8,
-          fill: 'transparent'
-        });
-      }
-    }
-  }, 300);
+// ===== 加载图标映射（用于名称转URL，提升编辑体验） =====
+async function loadIconMap() {
+  try {
+    const [blockRes, itemRes] = await Promise.all([
+      fetch('/icon/block.txt'),
+      fetch('/icon/item.txt')
+    ]);
+    const blockText = await blockRes.text();
+    const itemText = await itemRes.text();
+    const lines = [...blockText.split('\n'), ...itemText.split('\n')]
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+    const map = {};
+    lines.forEach(url => {
+      const parts = url.split('/');
+      const filename = parts[parts.length - 1];
+      const name = filename.replace(/\.[^.]+$/, '').replace(/_/g, ' ');
+      map[name] = url;
+    });
+    window.iconMap = map;
+  } catch (err) {
+    console.warn('图标映射加载失败，仅使用URL', err);
+    window.iconMap = {};
+  }
+}
+
+// ===== Rough.js 手绘描边 =====
+function applyRough() {
+  if (typeof rough === 'undefined') return;
+  const tableWrap = document.querySelector('.admin-table-wrap');
+  if (!tableWrap) return;
+  // 移除旧canvas
+  const oldCanvas = tableWrap.querySelector('canvas');
+  if (oldCanvas) oldCanvas.remove();
+
+  const rect = tableWrap.getBoundingClientRect();
+  const canvas = document.createElement('canvas');
+  canvas.width = rect.width + 20;
+  canvas.height = rect.height + 20;
+  canvas.style.cssText = 'position:absolute;top:-10px;left:-10px;pointer-events:none;z-index:0;';
+  tableWrap.style.position = 'relative';
+  tableWrap.appendChild(canvas);
+  const rc = rough.canvas(canvas);
+  rc.rectangle(0, 0, canvas.width, canvas.height, {
+    stroke: '#E85D04',
+    strokeWidth: 2,
+    roughness: 2.8,
+    fill: 'transparent'
+  });
+}
+
+// ===== 初始化 =====
+async function init() {
+  await loadIconMap();
+  // 如果已有密钥且已解锁，加载数据
+  const key = localStorage.getItem('adminKey');
+  if (key && adminContent.style.display !== 'none') {
+    await loadItems(key);
+  }
+  // 手绘描边（延迟等待DOM渲染）
+  setTimeout(applyRough, 500);
+}
+
+// 窗口resize重新描边
+let resizeTimer;
+window.addEventListener('resize', function() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(applyRough, 300);
 });
+
+init();
