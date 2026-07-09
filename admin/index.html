@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理员 · 货架后门</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/admin/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/rough.js/2.3.0/rough.min.js"></script>
+</head>
+<body>
+<div class="container admin-container">
+
+  <div class="top-bar">
+    <div class="server-brand">
+      <img src="/img/command_block.png" alt="命令方块" onerror="this.style.display='none'">
+      <h1>MCServer</h1>
+    </div>
+    <div class="currency">
+      <img src="/img/dirt.png" alt="泥土" onerror="this.style.display='none'">
+      <span>货币 · 泥土</span>
+    </div>
+  </div>
+
+  <div class="admin-main">
+    <div class="admin-header">
+      <h2>货架后门 · 开发者专用</h2>
+      <span class="count" id="itemCount">共 0 件商品</span>
+    </div>
+
+    <!-- 密钥输入（第一次访问时填写，存 localStorage） -->
+    <div class="key-section" id="keySection">
+      <p>输入管理密钥以访问货架</p>
+      <div class="key-input-row">
+        <input type="password" id="adminKeyInput" placeholder="管理密钥">
+        <button id="keySubmitBtn">解锁</button>
+      </div>
+      <div id="keyError" class="key-error"></div>
+    </div>
+
+    <!-- 商品列表（需要密钥才显示） -->
+    <div class="admin-table-wrap" id="adminContent" style="display:none;">
+      <div class="table-controls">
+        <button id="refreshBtn">刷新货架</button>
+        <span class="hint">点击行可编辑，修改后自动保存</span>
+      </div>
+      <div class="admin-table-scroll">
+        <table id="adminTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>商品名</th>
+              <th>单价</th>
+              <th>数量</th>
+              <th>卖家</th>
+              <th>图标</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <!-- 动态渲染 -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">别乱删，除非你确定</div>
+</div>
+
+<script src="/admin/script.js"></script>
+</body>
+</html>
