@@ -1,4 +1,4 @@
-// 没错，我还是全局状态
+// ========== 全局状态 ==========
 let allShopItems = [];
 let iconMap = {};
 let iconList = [];
@@ -6,10 +6,9 @@ let fuseInstance = null;
 let selectedIconUrl = '/img/dirt.png';
 let selectedIconName = '泥土（默认）';
 let currentSort = 'latest';
+let manageMode = false;
 
-const DEFAULT_ICON = '/img/dirt.png';
-
-// DOM
+// DOM 引用
 const grid = document.getElementById('cardGrid');
 const countEl = document.getElementById('itemCount');
 const form = document.getElementById('publishForm');
@@ -32,22 +31,7 @@ const managePassword = document.getElementById('managePassword');
 const manageBtn = document.getElementById('manageBtn');
 const manageResults = document.getElementById('manageResults');
 
-// 图标（有bug，只好去问deepseek）（这一段fuction是AI写的）
-function safeIcon(url) {
-  if (!url) return DEFAULT_ICON;
-  // 如果存的是名称，从映射取 URL
-  if (window.iconMap && window.iconMap[url]) {
-    return window.iconMap[url];
-  }
-  // 如果是相对路径或完整 URL，直接返回
-  if (url.startsWith('http') || url.startsWith('/')) {
-    return url;
-  }
-  // 其他情况回退
-  return DEFAULT_ICON;
-}
-
-// ========== 加载图标库 ==========（你没看错，这一段的bug和上面一样，AI帮忙修了）（AI太好用了）
+// ========== 加载图标库 ==========
 async function loadIcons() {
   try {
     const [blockRes, itemRes] = await Promise.all([
@@ -70,28 +54,22 @@ async function loadIcons() {
       names.push(name);
     });
     iconMap = map;
-    window.iconMap = map; // 暴露全局供其他地方使用
     iconList = names;
+    window.iconMap = map; // 暴露给全局
     fuseInstance = new Fuse(names, {
       threshold: 0.3,
       minMatchCharLength: 1,
     });
-    console.log(`已加载 ${names.length} 个图标`);
+    console.log('已加载图标数量:', names.length);
   } catch (err) {
     console.warn('图标加载失败', err);
-    // 即使图标加载失败，也不影响核心功能
   }
 }
 
-// ========== 图标搜索 ==========（你也没看错，这一段也有bug，不过没事，这一段只有下面十行左右是AI改的）
+// ========== 图标搜索 ==========
 function searchIcons(query) {
   if (!query.trim()) {
     iconDropdown.classList.remove('show');
-    return;
-  }
-  if (!fuseInstance) {
-    iconDropdown.innerHTML = `<div class="icon-option" style="color:#6a655a;justify-content:center;">图标库未加载</div>`;
-    iconDropdown.classList.add('show');
     return;
   }
   const results = fuseInstance.search(query.trim());
@@ -104,15 +82,9 @@ function searchIcons(query) {
   let html = '';
   matches.forEach(name => {
     const url = iconMap[name];
-    // 尝试 HTTPS，失败自动降级 HTTP + 回退
-    const fallbackUrl = url ? url.replace(/^https:/, 'http:') : DEFAULT_ICON;
     html += `
       <div class="icon-option" data-name="${name}" data-url="${url}">
-        <img src="${url}" 
-             alt="${name}" 
-             loading="lazy" 
-             onerror="this.onerror=null; this.src='${fallbackUrl}'; if(!this.src.startsWith('http')) this.src='${DEFAULT_ICON}';"
-             style="width:32px;height:32px;object-fit:contain;background:#0a0a0a;border-radius:4px;padding:2px;">
+        <img src="${url}" alt="${name}" loading="lazy" onerror="this.onerror=null; this.src='${url.replace(/^https:/, 'http:')}';">
         <span>${name}</span>
       </div>
     `;
@@ -121,7 +93,6 @@ function searchIcons(query) {
   iconDropdown.classList.add('show');
 }
 
-// 图标选择（这一段不是AI（doge））
 iconDropdown.addEventListener('click', function(e) {
   const option = e.target.closest('.icon-option');
   if (!option) return;
@@ -132,10 +103,7 @@ iconDropdown.addEventListener('click', function(e) {
     selectedIconUrl = url;
     iconSearch.value = name;
     iconPreviewImg.src = url;
-    iconPreviewImg.onerror = function() {
-      this.onerror = null;
-      this.src = url.replace(/^https:/, 'http:');
-    };
+    iconPreviewImg.onerror = function() { this.src = '/img/dirt.png'; };
     iconPreviewName.textContent = name;
     hiddenIconUrl.value = url;
     iconDropdown.classList.remove('show');
@@ -149,7 +117,7 @@ iconSearch.addEventListener('blur', function() {
   setTimeout(() => iconDropdown.classList.remove('show'), 200);
 });
 
-// 商品
+// ========== 渲染商品卡片 ==========
 function renderItems(items) {
   if (!items || items.length === 0) {
     grid.innerHTML = `<div class="empty-state">集市还空着，你是第一个敢吃螃蟹的</div>`;
@@ -166,18 +134,20 @@ function renderItems(items) {
 
   let html = '';
   sorted.forEach((item) => {
-    const rawIcon = item.icon || DEFAULT_ICON;
-    let iconUrl = safeIcon(rawIcon);
-    //这一段的bug和前面几个都一样，deepseek太好用了
-    const fallbackUrl = iconUrl.startsWith('https://') ? iconUrl.replace('https:', 'http:') : iconUrl;
+    let iconUrl = item.icon || '/img/dirt.png';
+    // 如果存的是名称，从映射取 URL
+    if (window.iconMap && window.iconMap[iconUrl]) {
+      iconUrl = window.iconMap[iconUrl];
+    }
+    // 确保是有效 URL
+    if (!iconUrl.startsWith('http') && !iconUrl.startsWith('/')) {
+      iconUrl = '/img/dirt.png';
+    }
     const rot = (Math.random() * 3 - 1.5).toFixed(1);
     html += `
       <div class="card-item" style="--rot:${rot}deg">
         <div class="top-row">
-          <img src="${iconUrl}" 
-               alt="${escapeHtml(item.name)}" 
-               loading="lazy"
-               onerror="this.onerror=null; this.src='${fallbackUrl}'; if(!this.src.startsWith('http')) this.src='${DEFAULT_ICON}';">
+          <img src="${iconUrl}" alt="" loading="lazy" onerror="this.onerror=null; this.src='${iconUrl.replace(/^https:/, 'http:')}';">
           <span class="item-name">${escapeHtml(item.name)}</span>
         </div>
         <div class="seller">
@@ -198,7 +168,7 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// 商品列表（剩下都不是AI了）
+// ========== 加载商品列表 ==========
 async function fetchItems() {
   try {
     const res = await fetch('/api/shop');
@@ -212,7 +182,7 @@ async function fetchItems() {
   }
 }
 
-// 
+// ========== 发布商品 ==========
 form.addEventListener('submit', async function(e) {
   e.preventDefault();
   const name = nameInput.value.trim();
@@ -220,7 +190,7 @@ form.addEventListener('submit', async function(e) {
   const qty = parseInt(qtyInput.value);
   const seller = sellerInput.value.trim();
   const password = passwordInput.value.trim();
-  const icon = hiddenIconUrl.value || DEFAULT_ICON;
+  const icon = hiddenIconUrl.value || '/img/dirt.png';
 
   if (!name || !price || !qty || !seller || !password) {
     showToast('填全了再扔，别糊弄');
@@ -249,11 +219,11 @@ form.addEventListener('submit', async function(e) {
     }
     showToast('扔进集市了，密码记好，删货要用');
     form.reset();
-    selectedIconUrl = DEFAULT_ICON;
+    selectedIconUrl = '/img/dirt.png';
     selectedIconName = '泥土（默认）';
-    iconPreviewImg.src = DEFAULT_ICON;
+    iconPreviewImg.src = '/img/dirt.png';
     iconPreviewName.textContent = '泥土（默认）';
-    hiddenIconUrl.value = DEFAULT_ICON;
+    hiddenIconUrl.value = '/img/dirt.png';
     iconSearch.value = '';
     await fetchItems();
   } catch (err) {
@@ -264,7 +234,7 @@ form.addEventListener('submit', async function(e) {
   }
 });
 
-// 吐司
+// ========== Toast ==========
 function showToast(msg) {
   const old = document.querySelector('.toast');
   if (old) old.remove();
@@ -275,7 +245,7 @@ function showToast(msg) {
   setTimeout(() => div.remove(), 4000);
 }
 
-// 排序
+// ========== 排序 ==========
 document.querySelectorAll('.shop-sort .sort-btn').forEach(btn => {
   btn.addEventListener('click', function() {
     document.querySelectorAll('.shop-sort .sort-btn').forEach(b => b.classList.remove('active'));
@@ -285,13 +255,13 @@ document.querySelectorAll('.shop-sort .sort-btn').forEach(btn => {
   });
 });
 
-// 普通用户
+// ========== 管理面板折叠 ==========
 manageToggle.addEventListener('click', function() {
   managePanel.classList.toggle('open');
   this.querySelector('.arrow').classList.toggle('open');
 });
 
-// 查询商品
+// ========== 管理：查询我的商品 ==========
 manageBtn.addEventListener('click', async function() {
   const seller = manageSeller.value.trim();
   const password = managePassword.value.trim();
@@ -334,31 +304,110 @@ manageBtn.addEventListener('click', async function() {
     myItems.forEach(item => {
       html += `
         <div class="manage-item" data-id="${item.id}">
-          <span>${escapeHtml(item.name)} × ${item.qty} 个 · ${item.price} 泥土</span>
-          <button class="del-btn" data-id="${item.id}">下架</button>
+          <div class="manage-item-info">
+            <span>${escapeHtml(item.name)} × ${item.qty} 个 · ${item.price} 泥土</span>
+            <button class="del-btn" data-id="${item.id}">下架</button>
+            <button class="edit-btn" data-id="${item.id}">编辑</button>
+          </div>
+          <div class="manage-edit-form" data-id="${item.id}" style="display:none; margin-top:0.5rem;">
+            <div class="form-group"><input type="text" class="edit-name" value="${escapeHtml(item.name)}" placeholder="商品名"></div>
+            <div class="form-group"><input type="number" class="edit-price" value="${item.price}" placeholder="单价" min="1"></div>
+            <div class="form-group"><input type="number" class="edit-qty" value="${item.qty}" placeholder="数量" min="1"></div>
+            <div class="form-group"><input type="text" class="edit-icon" value="${item.icon || ''}" placeholder="图标URL"></div>
+            <button class="save-edit-btn" data-id="${item.id}">保存修改</button>
+            <button class="cancel-edit-btn" data-id="${item.id}">取消</button>
+          </div>
         </div>
       `;
     });
     manageResults.innerHTML = html;
 
-    // 下架按钮
+    // 事件绑定：编辑/取消/保存（使用事件委托）
+    manageResults.querySelectorAll('.edit-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const id = this.dataset.id;
+        const formDiv = manageResults.querySelector(`.manage-edit-form[data-id="${id}"]`);
+        if (formDiv) formDiv.style.display = 'block';
+      });
+    });
+
+    manageResults.querySelectorAll('.cancel-edit-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const id = this.dataset.id;
+        const formDiv = manageResults.querySelector(`.manage-edit-form[data-id="${id}"]`);
+        if (formDiv) formDiv.style.display = 'none';
+      });
+    });
+
+    manageResults.querySelectorAll('.save-edit-btn').forEach(btn => {
+      btn.addEventListener('click', async function() {
+        const id = this.dataset.id;
+        const itemDiv = this.closest('.manage-item');
+        const name = itemDiv.querySelector('.edit-name').value.trim();
+        const price = parseInt(itemDiv.querySelector('.edit-price').value);
+        const qty = parseInt(itemDiv.querySelector('.edit-qty').value);
+        const icon = itemDiv.querySelector('.edit-icon').value.trim() || '/img/dirt.png';
+        if (!name || !price || !qty) {
+          showToast('请填完整');
+          return;
+        }
+        const seller = manageSeller.value.trim();
+        const password = managePassword.value.trim();
+        if (!seller || !password) {
+          showToast('请先输入卖家名和密码');
+          return;
+        }
+        try {
+          const res = await fetch('/api/shop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'update',
+              id: id,
+              name, price, qty, icon,
+              seller, password
+            })
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            showToast(data.error || '更新失败');
+            return;
+          }
+          showToast('修改成功');
+          // 刷新管理列表
+          manageBtn.click();
+          // 刷新主列表
+          fetchItems();
+        } catch (err) {
+          showToast('出错了：' + err.message);
+        }
+      });
+    });
+
+    // 下架按钮（同样使用事件委托，但已绑定过，为了避免重复绑定，用新方式）
+    // 但上面动态生成的 del-btn 还没有绑定，我们重新绑定
     manageResults.querySelectorAll('.del-btn').forEach(btn => {
       btn.addEventListener('click', async function() {
         const id = this.dataset.id;
         if (!confirm('确定下架这件商品？')) return;
-        const delRes = await fetch('/api/shop', {
+        const seller = manageSeller.value.trim();
+        const password = managePassword.value.trim();
+        if (!seller || !password) {
+          showToast('请先输入卖家名和密码');
+          return;
+        }
+        const res = await fetch('/api/shop', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'delete',
             id: id,
-            seller: seller,
-            password: password
+            seller, password
           })
         });
-        const delData = await delRes.json();
-        if (!delRes.ok) {
-          showToast(delData.error || '下架失败');
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || '下架失败');
           return;
         }
         showToast('已下架');
@@ -375,16 +424,14 @@ manageBtn.addEventListener('click', async function() {
   }
 });
 
-// 现成的库真好用（rough.js初始化）
+// ========== 初始化 ==========
 async function init() {
   await loadIcons();
   await fetchItems();
-  // Rough.js 手绘描边
+  // Rough.js
   if (typeof rough !== 'undefined') {
     const formArea = document.getElementById('roughForm');
     if (formArea) {
-      // 清除旧的canvas
-      formArea.querySelectorAll('canvas').forEach(c => c.remove());
       const rect = formArea.getBoundingClientRect();
       const canvas = document.createElement('canvas');
       canvas.width = rect.width + 20;
@@ -404,7 +451,3 @@ async function init() {
 }
 
 init();
-
-// 暴露一些变量供调试
-window.safeIcon = safeIcon;
-window.DEFAULT_ICON = DEFAULT_ICON;
