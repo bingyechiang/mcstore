@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redis 调试面板</title>
+  <style>
+    body {
+      background: #121212;
+      color: #ece7db;
+      font-family: 'Courier New', monospace;
+      padding: 2rem;
+    }
+    h1 { color: #E85D04; border-left: 6px solid #E85D04; padding-left: 1rem; }
+    .stats { display: flex; gap: 2rem; flex-wrap: wrap; margin: 1rem 0; }
+    .stat { background: #1a1a1a; padding: 0.5rem 1.5rem; border-radius: 20px; border: 1px solid #2a2a2a; }
+    .stat span { color: #E85D04; font-weight: 700; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      border: 1px solid #2a2a2a;
+      padding: 0.5rem;
+      text-align: left;
+    }
+    th { background: #1a1a1a; color: #8a847a; }
+    td { color: #d4cdb8; }
+    .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 20px; font-size: 0.7rem; background: #2a2a2a; }
+    .badge.ok { background: #1a3a1a; color: #6a7a5a; }
+    .badge.warn { background: #3a3a1a; color: #c0b060; }
+    .badge.danger { background: #3a1a1a; color: #e85a5a; }
+    .preview { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .key-name { font-weight: 700; color: #E85D04; }
+  </style>
+</head>
+<body>
+  <h1>🧹 Redis 数据库查看器</h1>
+  <div id="stats" class="stats">加载中...</div>
+  <table>
+    <thead>
+      <tr>
+        <th>键名</th>
+        <th>类型</th>
+        <th>大小</th>
+        <th>内容预览</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <script>
+    async function load() {
+      const statsDiv = document.getElementById('stats');
+      const tbody = document.getElementById('tbody');
+      try {
+        const res = await fetch('/api/debug');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        statsDiv.innerHTML = `
+          <div class="stat">总键数：<span>${data.totalKeys}</span></div>
+          <div class="stat">内存占用：<span>${data.usedMemory}</span></div>
+          <div class="stat">占30MB比例：<span>${(data.usedMemoryBytes / (30*1024*1024) * 100).toFixed(1)}%</span></div>
+        `;
+
+        let html = '';
+        for (const [key, info] of Object.entries(data.keys)) {
+          const sizeStr = info.length > 1024 ? (info.length / 1024).toFixed(1) + ' KB' : info.length + ' B';
+          let preview = info.preview;
+          if (typeof preview === 'object') {
+            preview = JSON.stringify(preview);
+          }
+          let badge = '';
+          if (info.type === 'string' && info.length > 10*1024) badge = '<span class="badge danger">大</span>';
+          else if (info.type === 'string' && info.length > 1024) badge = '<span class="badge warn">中</span>';
+          else badge = '<span class="badge ok">小</span>';
+
+          html += `
+            <tr>
+              <td class="key-name">${key}</td>
+              <td>${info.type}</td>
+              <td>${sizeStr} ${badge}</td>
+              <td class="preview">${escapeHtml(String(preview).substring(0, 200))}</td>
+              <td><button onclick="viewKey('${key}')">详情</button></td>
+            </tr>
+          `;
+        }
+        tbody.innerHTML = html;
+
+      } catch (err) {
+        statsDiv.innerHTML = `<div style="color:#e85a5a;">加载失败：${err.message}</div>`;
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function viewKey(key) {
+      // 简单弹窗显示完整内容
+      alert('点击键名查看完整内容，目前先这样，后续可做模态框');
+    }
+
+    load();
+  </script>
+</body>
+</html>
