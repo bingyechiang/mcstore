@@ -6,7 +6,8 @@ let fuseInstance = null;
 let selectedIconUrl = '/img/dirt.png';
 let selectedIconName = '泥土（默认）';
 let currentSort = 'latest';
-let manageMode = false;
+
+const DEFAULT_ICON = '/img/dirt.png';
 
 // DOM 引用
 const grid = document.getElementById('cardGrid');
@@ -31,6 +32,21 @@ const managePassword = document.getElementById('managePassword');
 const manageBtn = document.getElementById('manageBtn');
 const manageResults = document.getElementById('manageResults');
 
+// ========== 工具函数：安全获取图标 URL ==========
+function safeIcon(url) {
+  if (!url) return DEFAULT_ICON;
+  // 如果存的是名称，从映射取 URL
+  if (window.iconMap && window.iconMap[url]) {
+    return window.iconMap[url];
+  }
+  // 如果是相对路径或完整 URL，直接返回
+  if (url.startsWith('http') || url.startsWith('/')) {
+    return url;
+  }
+  // 其他情况回退
+  return DEFAULT_ICON;
+}
+
 // ========== 加载图标库 ==========
 async function loadIcons() {
   try {
@@ -54,13 +70,16 @@ async function loadIcons() {
       names.push(name);
     });
     iconMap = map;
+    window.iconMap = map; // 暴露全局供其他地方使用
     iconList = names;
     fuseInstance = new Fuse(names, {
       threshold: 0.3,
       minMatchCharLength: 1,
     });
+    console.log(`已加载 ${names.length} 个图标`);
   } catch (err) {
     console.warn('图标加载失败', err);
+    // 即使图标加载失败，也不影响核心功能
   }
 }
 
@@ -68,6 +87,11 @@ async function loadIcons() {
 function searchIcons(query) {
   if (!query.trim()) {
     iconDropdown.classList.remove('show');
+    return;
+  }
+  if (!fuseInstance) {
+    iconDropdown.innerHTML = `<div class="icon-option" style="color:#6a655a;justify-content:center;">图标库未加载</div>`;
+    iconDropdown.classList.add('show');
     return;
   }
   const results = fuseInstance.search(query.trim());
@@ -80,9 +104,15 @@ function searchIcons(query) {
   let html = '';
   matches.forEach(name => {
     const url = iconMap[name];
+    // 尝试 HTTPS，失败自动降级 HTTP + 回退
+    const fallbackUrl = url ? url.replace(/^https:/, 'http:') : DEFAULT_ICON;
     html += `
       <div class="icon-option" data-name="${name}" data-url="${url}">
-        <img src="${url}" alt="${name}" loading="lazy" onerror="this.style.display='none'">
+        <img src="${url}" 
+             alt="${name}" 
+             loading="lazy" 
+             onerror="this.onerror=null; this.src='${fallbackUrl}'; if(!this.src.startsWith('http')) this.src='${DEFAULT_ICON}';"
+             style="width:32px;height:32px;object-fit:contain;background:#0a0a0a;border-radius:4px;padding:2px;">
         <span>${name}</span>
       </div>
     `;
@@ -91,6 +121,7 @@ function searchIcons(query) {
   iconDropdown.classList.add('show');
 }
 
+// ===== 点击图标下拉选项 =====
 iconDropdown.addEventListener('click', function(e) {
   const option = e.target.closest('.icon-option');
   if (!option) return;
@@ -101,7 +132,10 @@ iconDropdown.addEventListener('click', function(e) {
     selectedIconUrl = url;
     iconSearch.value = name;
     iconPreviewImg.src = url;
-    iconPreviewImg.onerror = function() { this.src = '/img/dirt.png'; };
+    iconPreviewImg.onerror = function() {
+      this.onerror = null;
+      this.src = url.replace(/^https:/, 'http:');
+    };
     iconPreviewName.textContent = name;
     hiddenIconUrl.value = url;
     iconDropdown.classList.remove('show');
@@ -132,12 +166,18 @@ function renderItems(items) {
 
   let html = '';
   sorted.forEach((item) => {
+    const rawIcon = item.icon || DEFAULT_ICON;
+    let iconUrl = safeIcon(rawIcon);
+    // 如果 iconUrl 是完整的 https，准备一个 http 备选
+    const fallbackUrl = iconUrl.startsWith('https://') ? iconUrl.replace('https:', 'http:') : iconUrl;
     const rot = (Math.random() * 3 - 1.5).toFixed(1);
-    const icon = item.icon || '/img/dirt.png';
     html += `
       <div class="card-item" style="--rot:${rot}deg">
         <div class="top-row">
-          <img src="${icon}" alt="" loading="lazy" onerror="this.style.display='none'">
+          <img src="${iconUrl}" 
+               alt="${escapeHtml(item.name)}" 
+               loading="lazy"
+               onerror="this.onerror=null; this.src='${fallbackUrl}'; if(!this.src.startsWith('http')) this.src='${DEFAULT_ICON}';">
           <span class="item-name">${escapeHtml(item.name)}</span>
         </div>
         <div class="seller">
@@ -180,7 +220,7 @@ form.addEventListener('submit', async function(e) {
   const qty = parseInt(qtyInput.value);
   const seller = sellerInput.value.trim();
   const password = passwordInput.value.trim();
-  const icon = hiddenIconUrl.value || '/img/dirt.png';
+  const icon = hiddenIconUrl.value || DEFAULT_ICON;
 
   if (!name || !price || !qty || !seller || !password) {
     showToast('填全了再扔，别糊弄');
@@ -209,11 +249,11 @@ form.addEventListener('submit', async function(e) {
     }
     showToast('扔进集市了，密码记好，删货要用');
     form.reset();
-    selectedIconUrl = '/img/dirt.png';
+    selectedIconUrl = DEFAULT_ICON;
     selectedIconName = '泥土（默认）';
-    iconPreviewImg.src = '/img/dirt.png';
+    iconPreviewImg.src = DEFAULT_ICON;
     iconPreviewName.textContent = '泥土（默认）';
-    hiddenIconUrl.value = '/img/dirt.png';
+    hiddenIconUrl.value = DEFAULT_ICON;
     iconSearch.value = '';
     await fetchItems();
   } catch (err) {
@@ -269,7 +309,6 @@ manageBtn.addEventListener('click', async function() {
   manageBtn.textContent = '翻…';
 
   try {
-    // 用 POST 去查（复用同一个接口，传 action=manage）
     const res = await fetch('/api/shop', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -302,7 +341,7 @@ manageBtn.addEventListener('click', async function() {
     });
     manageResults.innerHTML = html;
 
-    // ===== 下架按钮事件 =====
+    // 下架按钮事件
     manageResults.querySelectorAll('.del-btn').forEach(btn => {
       btn.addEventListener('click', async function() {
         const id = this.dataset.id;
@@ -342,10 +381,12 @@ manageBtn.addEventListener('click', async function() {
 async function init() {
   await loadIcons();
   await fetchItems();
-  // Rough.js
+  // Rough.js 手绘描边
   if (typeof rough !== 'undefined') {
     const formArea = document.getElementById('roughForm');
     if (formArea) {
+      // 清除旧的 canvas
+      formArea.querySelectorAll('canvas').forEach(c => c.remove());
       const rect = formArea.getBoundingClientRect();
       const canvas = document.createElement('canvas');
       canvas.width = rect.width + 20;
@@ -365,3 +406,7 @@ async function init() {
 }
 
 init();
+
+// 暴露一些变量供调试
+window.safeIcon = safeIcon;
+window.DEFAULT_ICON = DEFAULT_ICON;
