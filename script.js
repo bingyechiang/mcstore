@@ -1,16 +1,16 @@
-// ========== 全局变量 ==========
-let allProducts = [];           // 所有商品（官方 + 玩家集市）
-let recommendProducts = [];     // 推荐商品（来自 recommend.csv）
-let playerItems = [];           // 玩家集市商品（单独存，用于显示剩余数量）
+//全局变量，别乱碰
+let allProducts = [];
+let recommendProducts = [];
+let playerItems = [];
 let currentSort = 'price-asc';
-let fuseInstance = null;        // Fuse 实例
+let fuseInstance = null;
 
-// ========== 加载所有 CSV ==========
+//用来显示商品列表的
 function loadAllCSV() {
   const inputEl = document.getElementById('searchInput');
   inputEl.placeholder = '扫描商店箱子中...';
 
-  // 官方文件列表
+  //列表
   const officialFiles = [
     '/csv/store.csv',
     '/csv/market.csv',
@@ -31,7 +31,7 @@ function loadAllCSV() {
     })
   );
 
-  // 玩家集市（/api/shop）
+  // 玩家集市
   const playerPromise = new Promise((resolve) => {
     fetch('/api/shop')
       .then(res => res.json())
@@ -54,7 +54,7 @@ function loadAllCSV() {
     const merged = [];
     playerItems = [];
 
-    // 处理官方
+    // 商店商品
     for (let i = 0; i < officialFiles.length; i++) {
       const rows = results[i] || [];
       const shopNameMap = ['商店', '商场', '附魔书商店', '积分商店', '超级泥土币商店'];
@@ -71,12 +71,12 @@ function loadAllCSV() {
           shop: shopNameMap[i] || '官方商店',
           seller: null,
           sourceType: 'official',
-          displayQty: null // 官方不显示数量
+          displayQty: null
         });
       });
     }
 
-    // 处理玩家集市（results 的倒数第二个）
+    //集市商品
     const playerRows = results[results.length - 2] || [];
     playerRows.forEach(row => {
       const name = row.name?.trim();
@@ -91,13 +91,13 @@ function loadAllCSV() {
         shop: null,
         seller: row.seller?.trim() || '玩家集市',
         sourceType: 'player',
-        displayQty: parseInt(row.qty) || 0 // 显示剩余数量
+        displayQty: parseInt(row.qty) || 0 // 没搞懂，这一行问别人的
       };
       merged.push(item);
       playerItems.push(item);
     });
 
-    // 处理推荐商品（results 的最后一个）
+    //推荐商品
     const recommendRows = results[results.length - 1] || [];
     recommendRows.forEach(row => {
       const name = row['商品名']?.trim();
@@ -122,7 +122,7 @@ function loadAllCSV() {
       console.warn('CSV 加载失败');
     }
 
-    // ===== 初始化 Fuse.js =====
+    // 模糊搜索
     fuseInstance = new Fuse(allProducts, {
       keys: ['name'],
       threshold: 0.4,
@@ -137,14 +137,14 @@ function loadAllCSV() {
   });
 }
 
-// ========== 渲染结果 ==========
+// 渲染
 function renderResults(filterText) {
   const list = document.getElementById('resultsList');
   const text = filterText.trim();
 
   let matched = [];
 
-  // 空搜索 → 显示推荐商品
+  // 无商品
   if (text === '') {
     matched = recommendProducts.length > 0 ? recommendProducts : [];
     if (matched.length === 0) {
@@ -153,7 +153,7 @@ function renderResults(filterText) {
       return;
     }
   } else {
-    // ===== 使用 Fuse.js 模糊搜索 =====
+    // 也是模糊sousuo
     const results = fuseInstance.search(text);
     matched = results.map(r => r.item);
 
@@ -186,7 +186,7 @@ function renderResults(filterText) {
     }
   }
 
-  // 挑衅头部（仅搜索时显示）
+  // head
   let headerMsg = '';
   if (text !== '') {
     const taunts = [
@@ -213,7 +213,7 @@ function renderResults(filterText) {
       tag = `<span class="tag" style="border-color:#E85D04; color:#E85D04;">官方·${p.shop}</span>`;
     } else {
       tag = `<span class="tag" style="border-color:#6a7a5a; color:#b0c0a0;">玩家·${p.seller}</span>`;
-      // 玩家商品显示剩余数量
+      // 剩余数量
       qtyDisplay = `<span class="qty" style="color:#7a7265; font-size:0.8rem;">剩余 ${p.displayQty || p.qty || 0} 个</span>`;
     }
 
@@ -239,7 +239,7 @@ function renderResults(filterText) {
   list.classList.add('show');
 }
 
-// ========== 事件绑定（保持不变） ==========
+// 事件
 const input = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
 const resultsList = document.getElementById('resultsList');
@@ -302,7 +302,7 @@ document.querySelectorAll('.sort-btn').forEach(btn => {
   });
 });
 
-// ========== Rough.js 手绘描边（不变） ==========
+// 手绘描边（感谢rough.js）
 function applyRough() {
   if (typeof rough === 'undefined') return;
   document.querySelectorAll('#roughSearch canvas, .nav-btn canvas').forEach(c => c.remove());
