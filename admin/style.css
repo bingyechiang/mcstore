@@ -1,4 +1,4 @@
-/* ===== 管理员专有样式 ===== */
+/* 管理后台の样式 */
 .admin-container {
   gap: 2rem;
 }
@@ -36,7 +36,7 @@
   border: 1px solid #2a2a2a;
 }
 
-/* 密钥输入区 */
+/* 密码 */
 .key-section {
   background: #1a1a1a;
   padding: 1.5rem 2rem;
@@ -91,7 +91,7 @@
   min-height: 1.2rem;
 }
 
-/* 表格区域 */
+/* 表格 */
 .admin-table-wrap {
   background: #1a1a1a;
   border-radius: 30px;
